@@ -5,11 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cost2Study by Sagnik❤️ | Secure Multi-User Dashboard</title>
 
+    <!-- React & ReactDOM -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     
+    <!-- Babel for JSX compilation -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -27,10 +30,11 @@
         }
     </script>
 
+    <!-- Framer Motion -->
     <script src="https://unpkg.com/framer-motion@10.12.16/dist/framer-motion.js"></script>
 
     <style>
-        body { background-color: #0b0f19; color: #f3f4f6; margin: 0; font-family: 'Inter', sans-serif; }
+        body { background-color: #0b0f19; color: #f3f4f6; margin: 0; font-family: 'Inter', sans-serif; overflow-x: hidden; }
         ::-webkit-scrollbar { width: 8px; }
         ::-webkit-scrollbar-track { background: #111827; }
         ::-webkit-scrollbar-thumb { background: #374151; border-radius: 4px; }
@@ -43,6 +47,9 @@
         }
         .glow-card:hover::before { box-shadow: 0 0 25px rgba(139, 92, 246, 0.15); }
         .digital-font { font-family: 'Courier New', Courier, monospace; letter-spacing: 2px; }
+        
+        /* Ensure content doesn't hide behind fixed footer */
+        .content-wrapper { padding-bottom: 60px; } 
     </style>
 </head>
 <body>
@@ -77,7 +84,6 @@
             JPY: { symbol: '¥', rate: 150.50 }
         };
 
-        // Helper: Format Seconds to HH:MM:SS
         const formatTime = (totalSeconds) => {
             const h = Math.floor(totalSeconds / 3600).toString().padStart(2, '0');
             const m = Math.floor((totalSeconds % 3600) / 60).toString().padStart(2, '0');
@@ -89,11 +95,14 @@
             // App State
             const [currentUser, setCurrentUser] = useState(null);
             const [activeTab, setActiveTab] = useState('dashboard');
-            const [authMode, setAuthMode] = useState('login'); // login or register
+            const [authMode, setAuthMode] = useState('login');
             
+            // Custom Popup State
+            const [popup, setPopup] = useState({ show: false, message: '', type: 'info' });
+
             // Header State
             const [time, setTime] = useState(new Date());
-            const [currency, setCurrency] = useState('USD');
+            const [currency, setCurrency] = useState('INR'); // Defaulted to INR based on the payment requirement
 
             // User Data State
             const [transactions, setTransactions] = useState([]);
@@ -105,13 +114,21 @@
             const [txInput, setTxInput] = useState({ type: 'income', amount: '', title: '' });
             const [taskInput, setTaskInput] = useState({ title: '', minutes: '' });
 
+            // --- Custom Modal Function ---
+            const showMessage = (message, type = 'info') => {
+                setPopup({ show: true, message, type });
+            };
+
+            const closePopup = () => {
+                setPopup({ show: false, message: '', type: 'info' });
+            };
+
             // --- Clock & 4 AM Reset Checker ---
             useEffect(() => {
                 const timer = setInterval(() => {
                     const now = new Date();
                     setTime(now);
 
-                    // Check for 4 AM Reset strictly on the client side
                     if (currentUser && now.getHours() === 4 && now.getMinutes() === 0 && now.getSeconds() === 0) {
                         perform4AMReset();
                     }
@@ -161,10 +178,10 @@
                 const { id, password } = authInput;
 
                 if (authMode === 'register') {
-                    if (users[id]) return alert("User ID already exists!");
-                    users[id] = { password, transactions: [], tasks: [], ledger: [], currency: 'USD' };
+                    if (users[id]) return showMessage("This User ID already exists! Please choose another.", "error");
+                    users[id] = { password, transactions: [], tasks: [], ledger: [], currency: 'INR' };
                     DB.saveUsers(users);
-                    alert("Registration successful! Please log in.");
+                    showMessage("Registration successful! You can now log in.", "success");
                     setAuthMode('login');
                 } else {
                     if (users[id] && users[id].password === password) {
@@ -172,9 +189,9 @@
                         setTransactions(users[id].transactions || []);
                         setTasks(users[id].tasks || []);
                         setLedger(users[id].ledger || []);
-                        setCurrency(users[id].currency || 'USD');
+                        setCurrency(users[id].currency || 'INR');
                     } else {
-                        alert("Invalid ID or Password.");
+                        showMessage("Invalid Login ID or Password. Please try again.", "error");
                     }
                 }
                 setAuthInput({ id: '', password: '' });
@@ -212,16 +229,13 @@
             };
 
             const perform4AMReset = () => {
-                // Keep the ledger, clear the daily boards
                 setTransactions([]);
-                // Optional: keep uncompleted tasks, but pause them
                 setTasks(prev => prev.filter(t => !t.completed).map(t => ({...t, isRunning: false})));
             };
 
             const addTransaction = (e) => {
                 e.preventDefault();
                 if (!txInput.amount || !txInput.title) return;
-                // Normalize amount to USD for underlying storage to make currency switching math easier
                 const baseAmount = parseFloat(txInput.amount) / CURRENCIES[currency].rate;
                 setTransactions([{ id: Date.now(), ...txInput, amount: baseAmount, time: time.toLocaleTimeString() }, ...transactions]);
                 setTxInput({ ...txInput, amount: '', title: '' });
@@ -244,7 +258,7 @@
             const toggleTaskTimer = (id) => {
                 setTasks(tasks.map(t => {
                     if (t.id === id) {
-                        if (t.completed) return t; // Don't start if done
+                        if (t.completed) return t; 
                         return { ...t, isRunning: !t.isRunning };
                     }
                     return t;
@@ -255,7 +269,7 @@
                 setTasks(tasks.map(t => t.id === id ? { ...t, completed: !t.completed, isRunning: false } : t));
             };
 
-            // --- Display Calculations ---
+            // --- Calculations ---
             const dispRate = CURRENCIES[currency].rate;
             const dispSym = CURRENCIES[currency].symbol;
 
@@ -263,236 +277,287 @@
             const totalExpense = transactions.filter(t => t.type === 'expense').reduce((a, b) => a + (b.amount * dispRate), 0);
             const netSavings = totalIncome - totalExpense;
 
-            // --- Views ---
-            if (!currentUser) {
-                return (
-                    <div className="min-h-screen flex items-center justify-center bg-darkBase relative overflow-hidden">
-                        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-darkCard p-8 rounded-2xl shadow-2xl w-96 glow-card border border-gray-800 z-10">
-                            <h2 className="text-3xl font-bold mb-2 text-center bg-clip-text text-transparent bg-gradient-to-r from-primary to-accent">
-                                {authMode === 'login' ? 'Cost2Study by Sagnik❤️' : 'Register ID'}
-                            </h2>
-                            <p className="text-center text-gray-500 text-sm mb-6">Secure Multi-User Environment</p>
-                            
-                            <form onSubmit={handleAuth} className="space-y-4">
-                                <div>
-                                    <input type="text" placeholder="Login ID" required value={authInput.id} onChange={e => setAuthInput({...authInput, id: e.target.value})} className="w-full bg-gray-900 border border-gray-700 rounded-lg p-3 text-white focus:outline-none focus:border-primary transition-colors" />
-                                </div>
-                                <div>
-                                    <input type="password" placeholder="Password" required value={authInput.password} onChange={e => setAuthInput({...authInput, password: e.target.value})} className="w-full bg-gray-900 border border-gray-700 rounded-lg p-3 text-white focus:outline-none focus:border-primary transition-colors" />
-                                </div>
-                                <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} type="submit" className="w-full bg-gradient-to-r from-primary to-accent text-white p-3 rounded-lg font-semibold shadow-lg">
-                                    {authMode === 'login' ? 'Authenticate' : 'Create Account'}
-                                </motion.button>
-                            </form>
-                            <div className="mt-4 text-center">
-                                <button onClick={() => setAuthMode(authMode === 'login' ? 'register' : 'login')} className="text-sm text-gray-400 hover:text-white transition-colors">
-                                    {authMode === 'login' ? "New here? Create an account" : "Already have an account? Log in"}
-                                </button>
-                            </div>
-                        </motion.div>
-                    </div>
-                );
-            }
-
             return (
-                <div className="min-h-screen bg-darkBase flex flex-col">
-                    {/* Top Header */}
-                    <header className="bg-darkCard border-b border-gray-800 py-4 px-8 flex justify-between items-center z-20 shadow-md">
-                        <div className="flex items-center gap-4">
-                            <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary to-accent">Cost2Study by Sagnik❤️</h1>
-                            <span className="bg-gray-800 text-gray-300 px-3 py-1 rounded-full text-xs font-mono border border-gray-700">
-                                User: {currentUser}
-                            </span>
-                        </div>
-                        
-                        {/* Digital Clock */}
-                        <div className="text-center">
-                            <div className="text-2xl font-bold text-white digital-font tracking-widest glow-card inline-block">
-                                {time.toLocaleTimeString()}
+                <div className="min-h-screen bg-darkBase flex flex-col font-sans">
+                    
+                    {/* --- Global Custom Popup Modal (SVMCM Style) --- */}
+                    <AnimatePresence>
+                        {popup.show && (
+                            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm">
+                                <motion.div 
+                                    initial={{ opacity: 0, scale: 0.9, y: 20 }} 
+                                    animate={{ opacity: 1, scale: 1, y: 0 }} 
+                                    exit={{ opacity: 0, scale: 0.9, y: 20 }} 
+                                    className="bg-darkCard border border-gray-700 shadow-2xl rounded-2xl p-6 min-w-[320px] max-w-sm text-center"
+                                >
+                                    <div className={`mx-auto w-12 h-12 rounded-full flex items-center justify-center mb-4 ${popup.type === 'error' ? 'bg-red-500/20 text-red-500' : 'bg-green-500/20 text-green-500'}`}>
+                                        {popup.type === 'error' ? '✖' : '✔'}
+                                    </div>
+                                    <h3 className="text-xl font-bold mb-2 text-white">
+                                        {popup.type === 'error' ? 'System Alert' : 'Success'}
+                                    </h3>
+                                    <p className="text-sm text-gray-300 mb-6 leading-relaxed">
+                                        {popup.message}
+                                    </p>
+                                    <button 
+                                        onClick={closePopup} 
+                                        className={`w-full text-white px-6 py-2.5 rounded-lg text-sm font-bold transition-all ${popup.type === 'error' ? 'bg-red-600 hover:bg-red-700' : 'bg-primary hover:bg-blue-600'}`}
+                                    >
+                                        Acknowledge
+                                    </button>
+                                </motion.div>
                             </div>
-                            <div className="text-xs text-gray-400 uppercase tracking-wider mt-1">{time.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</div>
+                        )}
+                    </AnimatePresence>
+
+                    {/* --- Auth Screen --- */}
+                    {!currentUser ? (
+                        <div className="flex-1 flex items-center justify-center bg-darkBase relative overflow-hidden content-wrapper">
+                            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-darkCard p-8 rounded-2xl shadow-2xl w-96 glow-card border border-gray-800 z-10">
+                                <h2 className="text-3xl font-bold mb-2 text-center bg-clip-text text-transparent bg-gradient-to-r from-primary to-accent">
+                                    {authMode === 'login' ? 'Cost2Study by Sagnik❤️' : 'Register ID'}
+                                </h2>
+                                <p className="text-center text-gray-500 text-sm mb-6">Secure Multi-User Environment</p>
+                                
+                                <form onSubmit={handleAuth} className="space-y-4">
+                                    <div>
+                                        <input type="text" placeholder="Login ID" required value={authInput.id} onChange={e => setAuthInput({...authInput, id: e.target.value})} className="w-full bg-gray-900 border border-gray-700 rounded-lg p-3 text-white focus:outline-none focus:border-primary transition-colors" />
+                                    </div>
+                                    <div>
+                                        <input type="password" placeholder="Password" required value={authInput.password} onChange={e => setAuthInput({...authInput, password: e.target.value})} className="w-full bg-gray-900 border border-gray-700 rounded-lg p-3 text-white focus:outline-none focus:border-primary transition-colors" />
+                                    </div>
+                                    <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} type="submit" className="w-full bg-gradient-to-r from-primary to-accent text-white p-3 rounded-lg font-semibold shadow-lg">
+                                        {authMode === 'login' ? 'Authenticate' : 'Create Account'}
+                                    </motion.button>
+                                </form>
+                                <div className="mt-4 text-center">
+                                    <button onClick={() => setAuthMode(authMode === 'login' ? 'register' : 'login')} className="text-sm text-gray-400 hover:text-white transition-colors">
+                                        {authMode === 'login' ? "New here? Create an account" : "Already have an account? Log in"}
+                                    </button>
+                                </div>
+                            </motion.div>
                         </div>
+                    ) : (
+                        /* --- Main Dashboard --- */
+                        <div className="flex flex-col flex-1">
+                            {/* Header */}
+                            <header className="bg-darkCard border-b border-gray-800 py-4 px-6 md:px-8 flex flex-wrap gap-4 justify-between items-center z-20 shadow-md">
+                                <div className="flex items-center gap-4">
+                                    <h1 className="text-xl md:text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary to-accent">Cost2Study by Sagnik❤️</h1>
+                                    <span className="hidden md:inline-block bg-gray-800 text-gray-300 px-3 py-1 rounded-full text-xs font-mono border border-gray-700">
+                                        User: {currentUser}
+                                    </span>
+                                </div>
+                                
+                                {/* Digital Clock */}
+                                <div className="text-center order-last md:order-none w-full md:w-auto">
+                                    <div className="text-xl md:text-2xl font-bold text-white digital-font tracking-widest glow-card inline-block">
+                                        {time.toLocaleTimeString()}
+                                    </div>
+                                    <div className="text-xs text-gray-400 uppercase tracking-wider mt-1">{time.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</div>
+                                </div>
 
-                        <div className="flex items-center gap-4">
-                            <select value={currency} onChange={e => setCurrency(e.target.value)} className="bg-gray-900 border border-gray-700 text-white text-sm rounded-lg focus:ring-primary focus:border-primary block p-2 outline-none">
-                                {Object.keys(CURRENCIES).map(c => <option key={c} value={c}>{c} ({CURRENCIES[c].symbol})</option>)}
-                            </select>
-                            <button onClick={logout} className="text-gray-400 hover:text-red-400 text-sm font-medium transition-colors border border-gray-700 hover:border-red-500 px-4 py-2 rounded-lg">
-                                Logout
-                            </button>
-                        </div>
-                    </header>
+                                <div className="flex items-center gap-3">
+                                    {/* Pay Button configured with UPI Intent Parameters */}
+                                    <a 
+                                        href="https://shivammedicalhall.github.io/upiqrcodegenerator/?pa=takadebhai@upi&pn=CoderSagnik&am=30&cu=INR" 
+                                        target="_blank" 
+                                        rel="noopener noreferrer"
+                                        className="bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-400 hover:to-emerald-500 text-white text-xs md:text-sm font-bold px-4 py-2 rounded-lg shadow-lg hover:shadow-green-500/25 transition-all flex items-center gap-2"
+                                    >
+                                        💸 <span className="hidden sm:inline">Pay for Own it!</span>
+                                    </a>
 
-                    <div className="flex flex-1 overflow-hidden">
-                        {/* Sidebar Navigation */}
-                        <nav className="w-64 bg-darkCard border-r border-gray-800 p-6 flex flex-col gap-2">
-                            <motion.button whileHover={{ x: 5 }} onClick={() => setActiveTab('dashboard')} className={`w-full text-left p-3 rounded-lg transition-colors font-medium ${activeTab === 'dashboard' ? 'bg-primary/20 text-primary border border-primary/30' : 'text-gray-400 hover:bg-gray-800'}`}>
-                                ⊞ Live Dashboard
-                            </motion.button>
-                            <motion.button whileHover={{ x: 5 }} onClick={() => setActiveTab('ledger')} className={`w-full text-left p-3 rounded-lg transition-colors font-medium ${activeTab === 'ledger' ? 'bg-accent/20 text-accent border border-accent/30' : 'text-gray-400 hover:bg-gray-800'}`}>
-                                ≣ Instant Ledger
-                            </motion.button>
-                        </nav>
+                                    <select value={currency} onChange={e => setCurrency(e.target.value)} className="bg-gray-900 border border-gray-700 text-white text-sm rounded-lg focus:ring-primary focus:border-primary block p-2 outline-none">
+                                        {Object.keys(CURRENCIES).map(c => <option key={c} value={c}>{c} ({CURRENCIES[c].symbol})</option>)}
+                                    </select>
+                                    
+                                    <button onClick={logout} className="text-gray-400 hover:text-red-400 text-sm font-medium transition-colors border border-gray-700 hover:border-red-500 px-3 py-2 rounded-lg">
+                                        Logout
+                                    </button>
+                                </div>
+                            </header>
 
-                        {/* Main Content Area */}
-                        <main className="flex-1 p-8 overflow-y-auto">
-                            <AnimatePresence mode="wait">
-                                {activeTab === 'dashboard' ? (
-                                    <motion.div key="dash" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="max-w-7xl mx-auto space-y-8">
-                                        
-                                        {/* Financial Overview */}
-                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                            <div className="bg-darkCard p-6 rounded-2xl border border-gray-800 glow-card">
-                                                <h3 className="text-gray-400 text-sm uppercase tracking-wider mb-2">Today's Income</h3>
-                                                <p className="text-4xl font-light text-green-400">{dispSym}{totalIncome.toFixed(2)}</p>
-                                            </div>
-                                            <div className="bg-darkCard p-6 rounded-2xl border border-gray-800 glow-card">
-                                                <h3 className="text-gray-400 text-sm uppercase tracking-wider mb-2">Today's Expenses</h3>
-                                                <p className="text-4xl font-light text-red-400">{dispSym}{totalExpense.toFixed(2)}</p>
-                                            </div>
-                                            <div className="bg-darkCard p-6 rounded-2xl border border-gray-800 glow-card relative overflow-hidden">
-                                                <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-accent/10 pointer-events-none"></div>
-                                                <h3 className="text-gray-400 text-sm uppercase tracking-wider mb-2 relative z-10">Net Savings</h3>
-                                                <p className={`text-4xl font-bold relative z-10 ${netSavings >= 0 ? 'text-white' : 'text-red-300'}`}>
-                                                    {netSavings < 0 ? '-' : ''}{dispSym}{Math.abs(netSavings).toFixed(2)}
-                                                </p>
-                                            </div>
-                                        </div>
+                            <div className="flex flex-1 overflow-hidden content-wrapper">
+                                {/* Sidebar Navigation */}
+                                <nav className="w-16 md:w-64 bg-darkCard border-r border-gray-800 p-4 md:p-6 flex flex-col gap-2">
+                                    <motion.button whileHover={{ x: 5 }} onClick={() => setActiveTab('dashboard')} className={`w-full text-left p-3 rounded-lg transition-colors font-medium flex items-center gap-2 ${activeTab === 'dashboard' ? 'bg-primary/20 text-primary border border-primary/30' : 'text-gray-400 hover:bg-gray-800'}`}>
+                                        <span className="text-xl">⊞</span> <span className="hidden md:inline">Live Dashboard</span>
+                                    </motion.button>
+                                    <motion.button whileHover={{ x: 5 }} onClick={() => setActiveTab('ledger')} className={`w-full text-left p-3 rounded-lg transition-colors font-medium flex items-center gap-2 ${activeTab === 'ledger' ? 'bg-accent/20 text-accent border border-accent/30' : 'text-gray-400 hover:bg-gray-800'}`}>
+                                        <span className="text-xl">≣</span> <span className="hidden md:inline">Instant Ledger</span>
+                                    </motion.button>
+                                </nav>
 
-                                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                                            {/* Financial Manager */}
-                                            <div className="bg-darkCard p-6 rounded-2xl border border-gray-800 glow-card flex flex-col">
-                                                <h2 className="text-xl font-semibold mb-4 border-b border-gray-800 pb-3">Financial Tracker</h2>
+                                {/* Main Content Area */}
+                                <main className="flex-1 p-4 md:p-8 overflow-y-auto">
+                                    <AnimatePresence mode="wait">
+                                        {activeTab === 'dashboard' ? (
+                                            <motion.div key="dash" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="max-w-7xl mx-auto space-y-8">
                                                 
-                                                <form onSubmit={addTransaction} className="flex flex-col gap-3 mb-6 bg-gray-900/50 p-4 rounded-xl border border-gray-800">
-                                                    <div className="flex gap-2">
-                                                        <select value={txInput.type} onChange={e => setTxInput({...txInput, type: e.target.value})} className="bg-gray-900 border border-gray-700 text-white text-sm rounded outline-none p-2 focus:border-primary">
-                                                            <option value="income">Income (+)</option>
-                                                            <option value="expense">Expense (-)</option>
-                                                        </select>
-                                                        <input type="text" placeholder="Title" value={txInput.title} onChange={e => setTxInput({...txInput, title: e.target.value})} className="flex-1 bg-gray-900 border border-gray-700 rounded p-2 text-sm focus:border-primary outline-none" required />
+                                                {/* Financial Overview */}
+                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                                    <div className="bg-darkCard p-6 rounded-2xl border border-gray-800 glow-card">
+                                                        <h3 className="text-gray-400 text-sm uppercase tracking-wider mb-2">Today's Income</h3>
+                                                        <p className="text-3xl lg:text-4xl font-light text-green-400">{dispSym}{totalIncome.toFixed(2)}</p>
                                                     </div>
-                                                    <div className="flex gap-2">
-                                                        <div className="relative flex-1">
-                                                            <span className="absolute left-3 top-2 text-gray-500">{dispSym}</span>
-                                                            <input type="number" step="0.01" placeholder={`Amount`} value={txInput.amount} onChange={e => setTxInput({...txInput, amount: e.target.value})} className="w-full bg-gray-900 border border-gray-700 rounded p-2 pl-8 text-sm focus:border-primary outline-none" required />
+                                                    <div className="bg-darkCard p-6 rounded-2xl border border-gray-800 glow-card">
+                                                        <h3 className="text-gray-400 text-sm uppercase tracking-wider mb-2">Today's Expenses</h3>
+                                                        <p className="text-3xl lg:text-4xl font-light text-red-400">{dispSym}{totalExpense.toFixed(2)}</p>
+                                                    </div>
+                                                    <div className="bg-darkCard p-6 rounded-2xl border border-gray-800 glow-card relative overflow-hidden">
+                                                        <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-accent/10 pointer-events-none"></div>
+                                                        <h3 className="text-gray-400 text-sm uppercase tracking-wider mb-2 relative z-10">Net Savings</h3>
+                                                        <p className={`text-3xl lg:text-4xl font-bold relative z-10 ${netSavings >= 0 ? 'text-white' : 'text-red-300'}`}>
+                                                            {netSavings < 0 ? '-' : ''}{dispSym}{Math.abs(netSavings).toFixed(2)}
+                                                        </p>
+                                                    </div>
+                                                </div>
+
+                                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                                                    {/* Financial Manager */}
+                                                    <div className="bg-darkCard p-6 rounded-2xl border border-gray-800 glow-card flex flex-col max-h-[500px]">
+                                                        <h2 className="text-xl font-semibold mb-4 border-b border-gray-800 pb-3">Financial Tracker</h2>
+                                                        
+                                                        <form onSubmit={addTransaction} className="flex flex-col gap-3 mb-6 bg-gray-900/50 p-4 rounded-xl border border-gray-800 shrink-0">
+                                                            <div className="flex gap-2">
+                                                                <select value={txInput.type} onChange={e => setTxInput({...txInput, type: e.target.value})} className="bg-gray-900 border border-gray-700 text-white text-sm rounded outline-none p-2 focus:border-primary">
+                                                                    <option value="income">Income (+)</option>
+                                                                    <option value="expense">Expense (-)</option>
+                                                                </select>
+                                                                <input type="text" placeholder="Title" value={txInput.title} onChange={e => setTxInput({...txInput, title: e.target.value})} className="flex-1 bg-gray-900 border border-gray-700 rounded p-2 text-sm focus:border-primary outline-none" required />
+                                                            </div>
+                                                            <div className="flex gap-2">
+                                                                <div className="relative flex-1">
+                                                                    <span className="absolute left-3 top-2 text-gray-500">{dispSym}</span>
+                                                                    <input type="number" step="0.01" placeholder={`Amount`} value={txInput.amount} onChange={e => setTxInput({...txInput, amount: e.target.value})} className="w-full bg-gray-900 border border-gray-700 rounded p-2 pl-8 text-sm focus:border-primary outline-none" required />
+                                                                </div>
+                                                                <motion.button whileTap={{ scale: 0.95 }} type="submit" className={`px-6 rounded text-sm font-medium transition-colors ${txInput.type === 'income' ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30 border border-green-500/50' : 'bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/50'}`}>
+                                                                    Add Record
+                                                                </motion.button>
+                                                            </div>
+                                                        </form>
+
+                                                        <div className="flex-1 overflow-y-auto space-y-2 pr-2">
+                                                            <AnimatePresence>
+                                                                {transactions.map(tx => (
+                                                                    <motion.div key={tx.id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} className="flex justify-between items-center bg-gray-900 p-3 rounded-lg border border-gray-800">
+                                                                        <div>
+                                                                            <p className="text-sm text-gray-200">{tx.title}</p>
+                                                                            <p className="text-xs text-gray-500">{tx.time}</p>
+                                                                        </div>
+                                                                        <span className={`font-mono font-medium ${tx.type === 'income' ? 'text-green-400' : 'text-red-400'}`}>
+                                                                            {tx.type === 'income' ? '+' : '-'}{dispSym}{(tx.amount * dispRate).toFixed(2)}
+                                                                        </span>
+                                                                    </motion.div>
+                                                                ))}
+                                                            </AnimatePresence>
                                                         </div>
-                                                        <motion.button whileTap={{ scale: 0.95 }} type="submit" className={`px-6 rounded text-sm font-medium transition-colors ${txInput.type === 'income' ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30 border border-green-500/50' : 'bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/50'}`}>
-                                                            Add Record
-                                                        </motion.button>
                                                     </div>
-                                                </form>
 
-                                                <div className="flex-1 overflow-y-auto space-y-2 pr-2">
-                                                    <AnimatePresence>
-                                                        {transactions.map(tx => (
-                                                            <motion.div key={tx.id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} className="flex justify-between items-center bg-gray-900 p-3 rounded-lg border border-gray-800">
-                                                                <div>
-                                                                    <p className="text-sm text-gray-200">{tx.title}</p>
-                                                                    <p className="text-xs text-gray-500">{tx.time}</p>
-                                                                </div>
-                                                                <span className={`font-mono font-medium ${tx.type === 'income' ? 'text-green-400' : 'text-red-400'}`}>
-                                                                    {tx.type === 'income' ? '+' : '-'}{dispSym}{(tx.amount * dispRate).toFixed(2)}
-                                                                </span>
-                                                            </motion.div>
-                                                        ))}
-                                                    </AnimatePresence>
-                                                </div>
-                                            </div>
+                                                    {/* Study Timer Manager */}
+                                                    <div className="bg-darkCard p-6 rounded-2xl border border-gray-800 glow-card flex flex-col max-h-[500px]">
+                                                        <h2 className="text-xl font-semibold mb-4 border-b border-gray-800 pb-3 flex justify-between items-center">
+                                                            <span>Study Targets</span>
+                                                            <span className="text-xs bg-accent/20 text-accent px-2 py-1 rounded border border-accent/30">Active: {tasks.filter(t=>t.isRunning).length}</span>
+                                                        </h2>
+                                                        
+                                                        <form onSubmit={addTask} className="flex gap-2 mb-6 bg-gray-900/50 p-4 rounded-xl border border-gray-800 shrink-0">
+                                                            <input type="text" placeholder="Task description..." value={taskInput.title} onChange={e => setTaskInput({...taskInput, title: e.target.value})} className="flex-1 bg-gray-900 border border-gray-700 rounded p-2 text-sm focus:border-accent outline-none" required />
+                                                            <input type="number" placeholder="Mins" min="1" max="999" value={taskInput.minutes} onChange={e => setTaskInput({...taskInput, minutes: e.target.value})} className="w-16 md:w-20 bg-gray-900 border border-gray-700 rounded p-2 text-sm focus:border-accent outline-none text-center" required />
+                                                            <motion.button whileTap={{ scale: 0.95 }} type="submit" className="bg-accent text-white px-4 rounded font-medium hover:bg-purple-600 transition-colors">+</motion.button>
+                                                        </form>
 
-                                            {/* Study Timer Manager */}
-                                            <div className="bg-darkCard p-6 rounded-2xl border border-gray-800 glow-card flex flex-col">
-                                                <h2 className="text-xl font-semibold mb-4 border-b border-gray-800 pb-3 flex justify-between items-center">
-                                                    <span>Study Targets & Timers</span>
-                                                    <span className="text-xs bg-accent/20 text-accent px-2 py-1 rounded border border-accent/30">Active Count: {tasks.filter(t=>t.isRunning).length}</span>
-                                                </h2>
-                                                
-                                                <form onSubmit={addTask} className="flex gap-2 mb-6 bg-gray-900/50 p-4 rounded-xl border border-gray-800">
-                                                    <input type="text" placeholder="Task description..." value={taskInput.title} onChange={e => setTaskInput({...taskInput, title: e.target.value})} className="flex-1 bg-gray-900 border border-gray-700 rounded p-2 text-sm focus:border-accent outline-none" required />
-                                                    <input type="number" placeholder="Mins" min="1" max="999" value={taskInput.minutes} onChange={e => setTaskInput({...taskInput, minutes: e.target.value})} className="w-20 bg-gray-900 border border-gray-700 rounded p-2 text-sm focus:border-accent outline-none text-center" required />
-                                                    <motion.button whileTap={{ scale: 0.95 }} type="submit" className="bg-accent text-white px-4 rounded font-medium hover:bg-purple-600 transition-colors">+</motion.button>
-                                                </form>
+                                                        <div className="flex-1 overflow-y-auto space-y-3 pr-2">
+                                                            <AnimatePresence>
+                                                                {tasks.map(task => (
+                                                                    <motion.div key={task.id} layout initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: task.completed ? 0.6 : 1, scale: 1 }} className={`bg-gray-900 p-4 rounded-xl border transition-colors duration-300 ${task.isRunning ? 'border-accent shadow-[0_0_15px_rgba(139,92,246,0.2)]' : 'border-gray-800'}`}>
+                                                                        
+                                                                        <div className="flex justify-between items-center mb-2">
+                                                                            <div className="flex items-center gap-3 overflow-hidden">
+                                                                                <button onClick={() => markTaskDone(task.id)} className={`shrink-0 w-5 h-5 rounded border flex items-center justify-center transition-colors ${task.completed ? 'bg-green-500 border-green-500' : 'border-gray-500 hover:border-green-500'}`}>
+                                                                                    {task.completed && <span className="text-white text-xs">✓</span>}
+                                                                                </button>
+                                                                                <span className={`font-medium truncate ${task.completed ? 'line-through text-gray-500' : 'text-gray-200'}`} title={task.title}>{task.title}</span>
+                                                                            </div>
+                                                                            <div className={`shrink-0 digital-font font-bold text-base md:text-lg ${task.isRunning ? 'text-accent' : task.completed ? 'text-gray-500' : 'text-gray-300'}`}>
+                                                                                {formatTime(task.remainingTime)}
+                                                                            </div>
+                                                                        </div>
 
-                                                <div className="flex-1 overflow-y-auto space-y-3 pr-2">
-                                                    <AnimatePresence>
-                                                        {tasks.map(task => (
-                                                            <motion.div key={task.id} layout initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: task.completed ? 0.6 : 1, scale: 1 }} className={`bg-gray-900 p-4 rounded-xl border transition-colors duration-300 ${task.isRunning ? 'border-accent shadow-[0_0_15px_rgba(139,92,246,0.2)]' : 'border-gray-800'}`}>
-                                                                
-                                                                <div className="flex justify-between items-center mb-2">
-                                                                    <div className="flex items-center gap-3">
-                                                                        <button onClick={() => markTaskDone(task.id)} className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${task.completed ? 'bg-green-500 border-green-500' : 'border-gray-500 hover:border-green-500'}`}>
-                                                                            {task.completed && <span className="text-white text-xs">✓</span>}
-                                                                        </button>
-                                                                        <span className={`font-medium ${task.completed ? 'strikethrough' : 'text-gray-200'}`}>{task.title}</span>
-                                                                    </div>
-                                                                    <div className={`digital-font font-bold text-lg ${task.isRunning ? 'text-accent' : task.completed ? 'text-gray-500' : 'text-gray-300'}`}>
-                                                                        {formatTime(task.remainingTime)}
-                                                                    </div>
-                                                                </div>
-
-                                                                {!task.completed && (
-                                                                    <div className="flex justify-end gap-2 mt-2">
-                                                                        <button onClick={() => toggleTaskTimer(task.id)} className={`px-4 py-1.5 rounded text-xs font-bold tracking-wider uppercase transition-colors ${task.isRunning ? 'bg-orange-500/20 text-orange-400 border border-orange-500/50 hover:bg-orange-500/30' : 'bg-primary/20 text-primary border border-primary/50 hover:bg-primary/30'}`}>
-                                                                            {task.isRunning ? '⏸ Pause' : '▶ Start'}
-                                                                        </button>
-                                                                    </div>
-                                                                )}
-                                                            </motion.div>
-                                                        ))}
-                                                        {tasks.length === 0 && <p className="text-center text-gray-600 mt-6 text-sm">No tasks. Set a target and start the clock!</p>}
-                                                    </AnimatePresence>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </motion.div>
-                                ) : (
-                                    /* Instant Ledger View */
-                                    <motion.div key="ledger" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="max-w-6xl mx-auto">
-                                        <div className="bg-darkCard p-8 rounded-2xl border border-gray-800 glow-card">
-                                            <div className="flex justify-between items-center mb-6 border-b border-gray-800 pb-4">
-                                                <h2 className="text-2xl font-semibold">Instant Statement Ledger</h2>
-                                                <span className="text-sm bg-gray-800 text-gray-400 px-3 py-1 rounded-full border border-gray-700">Live Updates Enabled</span>
-                                            </div>
-
-                                            <div className="overflow-x-auto rounded-xl border border-gray-800">
-                                                <table className="w-full text-left border-collapse">
-                                                    <thead className="bg-gray-900">
-                                                        <tr className="text-gray-400 text-sm uppercase tracking-wider">
-                                                            <th className="p-4 font-medium border-b border-gray-800">Date</th>
-                                                            <th className="p-4 font-medium border-b border-gray-800">Income</th>
-                                                            <th className="p-4 font-medium border-b border-gray-800">Expenses</th>
-                                                            <th className="p-4 font-medium border-b border-gray-800">Net Savings</th>
-                                                            <th className="p-4 font-medium border-b border-gray-800">Study Score</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody className="bg-darkCard text-sm font-medium text-gray-200">
-                                                        <AnimatePresence>
-                                                            {ledger.map((day, i) => (
-                                                                <motion.tr key={day.date} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors">
-                                                                    <td className="p-4">{day.date}</td>
-                                                                    <td className="p-4 text-green-400">{dispSym}{(day.income * dispRate).toFixed(2)}</td>
-                                                                    <td className="p-4 text-red-400">{dispSym}{(day.expense * dispRate).toFixed(2)}</td>
-                                                                    <td className={`p-4 ${day.savings >= 0 ? 'text-white' : 'text-red-300'}`}>{dispSym}{(Math.abs(day.savings) * dispRate).toFixed(2)}</td>
-                                                                    <td className="p-4">
-                                                                        <span className="bg-accent/20 text-accent px-2 py-1 rounded border border-accent/30">{day.studyScore}</span>
-                                                                    </td>
-                                                                </motion.tr>
-                                                            ))}
-                                                        </AnimatePresence>
-                                                    </tbody>
-                                                </table>
-                                                {ledger.length === 0 && (
-                                                    <div className="text-center p-12 text-gray-500">
-                                                        No data recorded yet. Add finances or complete tasks to generate your first statement instantly.
+                                                                        {!task.completed && (
+                                                                            <div className="flex justify-end gap-2 mt-2">
+                                                                                <button onClick={() => toggleTaskTimer(task.id)} className={`px-4 py-1.5 rounded text-xs font-bold tracking-wider uppercase transition-colors ${task.isRunning ? 'bg-orange-500/20 text-orange-400 border border-orange-500/50 hover:bg-orange-500/30' : 'bg-primary/20 text-primary border border-primary/50 hover:bg-primary/30'}`}>
+                                                                                    {task.isRunning ? '⏸ Pause' : '▶ Start'}
+                                                                                </button>
+                                                                            </div>
+                                                                        )}
+                                                                    </motion.div>
+                                                                ))}
+                                                                {tasks.length === 0 && <p className="text-center text-gray-600 mt-6 text-sm">No tasks. Set a target and start the clock!</p>}
+                                                            </AnimatePresence>
+                                                        </div>
                                                     </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </motion.div>
-                                )}
-                            </AnimatePresence>
-                        </main>
-                    </div>
+                                                </div>
+                                            </motion.div>
+                                        ) : (
+                                            /* Instant Ledger View */
+                                            <motion.div key="ledger" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="max-w-6xl mx-auto">
+                                                <div className="bg-darkCard p-6 md:p-8 rounded-2xl border border-gray-800 glow-card">
+                                                    <div className="flex flex-col md:flex-row justify-between md:items-center mb-6 border-b border-gray-800 pb-4 gap-4">
+                                                        <h2 className="text-xl md:text-2xl font-semibold">Instant Statement Ledger</h2>
+                                                        <span className="self-start md:self-auto text-xs bg-gray-800 text-gray-400 px-3 py-1 rounded-full border border-gray-700">Live Updates Enabled</span>
+                                                    </div>
+
+                                                    <div className="overflow-x-auto rounded-xl border border-gray-800">
+                                                        <table className="w-full text-left border-collapse min-w-[600px]">
+                                                            <thead className="bg-gray-900">
+                                                                <tr className="text-gray-400 text-xs md:text-sm uppercase tracking-wider">
+                                                                    <th className="p-4 font-medium border-b border-gray-800">Date</th>
+                                                                    <th className="p-4 font-medium border-b border-gray-800">Income</th>
+                                                                    <th className="p-4 font-medium border-b border-gray-800">Expenses</th>
+                                                                    <th className="p-4 font-medium border-b border-gray-800">Net Savings</th>
+                                                                    <th className="p-4 font-medium border-b border-gray-800">Study Score</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody className="bg-darkCard text-sm font-medium text-gray-200">
+                                                                <AnimatePresence>
+                                                                    {ledger.map((day, i) => (
+                                                                        <motion.tr key={day.date} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors">
+                                                                            <td className="p-4 text-gray-400">{day.date}</td>
+                                                                            <td className="p-4 text-green-400">{dispSym}{(day.income * dispRate).toFixed(2)}</td>
+                                                                            <td className="p-4 text-red-400">{dispSym}{(day.expense * dispRate).toFixed(2)}</td>
+                                                                            <td className={`p-4 ${day.savings >= 0 ? 'text-white' : 'text-red-300'}`}>{dispSym}{(Math.abs(day.savings) * dispRate).toFixed(2)}</td>
+                                                                            <td className="p-4">
+                                                                                <span className="bg-accent/20 text-accent px-2 py-1 rounded border border-accent/30">{day.studyScore}</span>
+                                                                            </td>
+                                                                        </motion.tr>
+                                                                    ))}
+                                                                </AnimatePresence>
+                                                            </tbody>
+                                                        </table>
+                                                        {ledger.length === 0 && (
+                                                            <div className="text-center p-12 text-gray-500 text-sm">
+                                                                No data recorded yet. Add finances or complete tasks to generate your first statement instantly.
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
+                                </main>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* --- Fixed Footer --- */}
+                    <footer className="fixed bottom-0 left-0 w-full bg-darkCard border-t border-gray-800 py-3 text-center z-[60]">
+                        <p className="text-gray-400 text-xs sm:text-sm font-medium tracking-wide">
+                            © Copyright 2026, Developed by Sagnik❤️ All Rights Reserved.
+                        </p>
+                    </footer>
+
                 </div>
             );
         }
