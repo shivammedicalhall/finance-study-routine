@@ -47,8 +47,6 @@
         }
         .glow-card:hover::before { box-shadow: 0 0 25px rgba(139, 92, 246, 0.15); }
         .digital-font { font-family: 'Courier New', Courier, monospace; letter-spacing: 2px; }
-        
-        /* Ensure content doesn't hide behind fixed footer */
         .content-wrapper { padding-bottom: 60px; } 
     </style>
 </head>
@@ -100,9 +98,10 @@
             // Custom Popup State
             const [popup, setPopup] = useState({ show: false, message: '', type: 'info' });
 
-            // Header State
+            // Header & Date State
             const [time, setTime] = useState(new Date());
-            const [currency, setCurrency] = useState('INR'); // Defaulted to INR
+            const [currentDateStr, setCurrentDateStr] = useState(new Date().toLocaleDateString());
+            const [currency, setCurrency] = useState('INR');
 
             // User Data State
             const [transactions, setTransactions] = useState([]);
@@ -123,18 +122,21 @@
                 setPopup({ show: false, message: '', type: 'info' });
             };
 
-            // --- Clock & 4 AM Reset Checker ---
+            // --- Live Clock & 12 AM Robust Reset Checker ---
             useEffect(() => {
                 const timer = setInterval(() => {
                     const now = new Date();
                     setTime(now);
 
-                    if (currentUser && now.getHours() === 4 && now.getMinutes() === 0 && now.getSeconds() === 0) {
-                        perform4AMReset();
+                    const newDateStr = now.toLocaleDateString();
+                    
+                    // If the date string has changed while the app is open, trigger midnight reset
+                    if (currentUser && newDateStr !== currentDateStr) {
+                        performMidnightReset(newDateStr);
                     }
                 }, 1000);
                 return () => clearInterval(timer);
-            }, [currentUser]);
+            }, [currentUser, currentDateStr]);
 
             // --- Task Countdown Timer Logic ---
             useEffect(() => {
@@ -171,25 +173,39 @@
                 }
             }, [currency]);
 
-            // --- Auth Handlers ---
+            // --- Auth Handlers (with Offline Rollover logic) ---
             const handleAuth = (e) => {
                 e.preventDefault();
                 const users = DB.getUsers();
                 const { id, password } = authInput;
+                const todayStr = new Date().toLocaleDateString();
 
                 if (authMode === 'register') {
                     if (users[id]) return showMessage("This User ID already exists! Please choose another.", "error");
-                    users[id] = { password, transactions: [], tasks: [], ledger: [], currency: 'INR' };
+                    // Initialize with lastActiveDate
+                    users[id] = { password, transactions: [], tasks: [], ledger: [], currency: 'INR', lastActiveDate: todayStr };
                     DB.saveUsers(users);
                     showMessage("Registration successful! You can now log in.", "success");
                     setAuthMode('login');
                 } else {
                     if (users[id] && users[id].password === password) {
+                        
+                        // Offline 12 AM Rollover Check
+                        if (users[id].lastActiveDate !== todayStr) {
+                            // It's a new day! Clear daily active boards. History is safe in ledger.
+                            users[id].transactions = [];
+                            users[id].tasks = [];
+                            users[id].lastActiveDate = todayStr;
+                            DB.saveUsers(users);
+                        }
+
                         setCurrentUser(id);
                         setTransactions(users[id].transactions || []);
                         setTasks(users[id].tasks || []);
                         setLedger(users[id].ledger || []);
                         setCurrency(users[id].currency || 'INR');
+                        setCurrentDateStr(todayStr);
+
                     } else {
                         showMessage("Invalid Login ID or Password. Please try again.", "error");
                     }
@@ -203,14 +219,8 @@
             };
 
             // --- Feature Logic ---
-            const getLogicalDateStr = () => {
-                let d = new Date();
-                if (d.getHours() < 4) d.setDate(d.getDate() - 1);
-                return d.toLocaleDateString();
-            };
-
             const updateInstantStatement = () => {
-                const todayStr = getLogicalDateStr();
+                const todayStr = new Date().toLocaleDateString();
                 const income = transactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
                 const expense = transactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
                 const completedTasks = tasks.filter(t => t.completed).length;
@@ -228,9 +238,16 @@
                 });
             };
 
-            const perform4AMReset = () => {
+            const performMidnightReset = (newDateStr) => {
+                // Wipes current daily data to 0. Historical data is preserved in Ledger automatically.
                 setTransactions([]);
-                setTasks(prev => prev.filter(t => !t.completed).map(t => ({...t, isRunning: false})));
+                setTasks([]);
+                setCurrentDateStr(newDateStr);
+                
+                // Update DB immediately
+                if (currentUser) {
+                    DB.updateUserData(currentUser, { transactions: [], tasks: [], lastActiveDate: newDateStr });
+                }
             };
 
             const addTransaction = (e) => {
@@ -248,6 +265,7 @@
                 setTasks([...tasks, { 
                     id: Date.now(), 
                     title: taskInput.title, 
+                    totalTime: totalSeconds, // Store total to calculate progress
                     remainingTime: totalSeconds, 
                     isRunning: false, 
                     completed: false 
@@ -358,7 +376,6 @@
                                 </div>
 
                                 <div className="flex items-center gap-3">
-                                    {/* Pay Button configured with New URL */}
                                     <a 
                                         href="https://shivammedicalhall.github.io/paymentpage/?amount=50" 
                                         target="_blank" 
@@ -455,10 +472,10 @@
                                                         </div>
                                                     </div>
 
-                                                    {/* Study Timer Manager */}
+                                                    {/* Study Status Manager (Replacing Targets) */}
                                                     <div className="bg-darkCard p-6 rounded-2xl border border-gray-800 glow-card flex flex-col max-h-[500px]">
                                                         <h2 className="text-xl font-semibold mb-4 border-b border-gray-800 pb-3 flex justify-between items-center">
-                                                            <span>Study Targets</span>
+                                                            <span>Study Status</span>
                                                             <span className="text-xs bg-accent/20 text-accent px-2 py-1 rounded border border-accent/30">Active: {tasks.filter(t=>t.isRunning).length}</span>
                                                         </h2>
                                                         
@@ -468,10 +485,12 @@
                                                             <motion.button whileTap={{ scale: 0.95 }} type="submit" className="bg-accent text-white px-4 rounded font-medium hover:bg-purple-600 transition-colors">+</motion.button>
                                                         </form>
 
-                                                        <div className="flex-1 overflow-y-auto space-y-3 pr-2">
+                                                        <div className="flex-1 overflow-y-auto space-y-4 pr-2">
                                                             <AnimatePresence>
-                                                                {tasks.map(task => (
-                                                                    <motion.div key={task.id} layout initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: task.completed ? 0.6 : 1, scale: 1 }} className={`bg-gray-900 p-4 rounded-xl border transition-colors duration-300 ${task.isRunning ? 'border-accent shadow-[0_0_15px_rgba(139,92,246,0.2)]' : 'border-gray-800'}`}>
+                                                                {tasks.map(task => {
+                                                                    const progressPct = ((task.totalTime - task.remainingTime) / task.totalTime) * 100;
+                                                                    return (
+                                                                    <motion.div key={task.id} layout initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: task.completed ? 0.6 : 1, scale: 1 }} className={`bg-gray-900 p-4 rounded-xl border transition-colors duration-300 ${task.isRunning ? 'border-accent shadow-[0_0_15px_rgba(139,92,246,0.15)]' : 'border-gray-800'}`}>
                                                                         
                                                                         <div className="flex justify-between items-center mb-2">
                                                                             <div className="flex items-center gap-3 overflow-hidden">
@@ -485,15 +504,25 @@
                                                                             </div>
                                                                         </div>
 
+                                                                        {/* Animated Forward Progress Bar */}
+                                                                        <div className="w-full bg-gray-800 h-1.5 rounded-full mt-3 overflow-hidden">
+                                                                            <motion.div 
+                                                                                className={`h-full ${task.completed ? 'bg-green-500' : 'bg-accent'}`}
+                                                                                initial={{ width: 0 }}
+                                                                                animate={{ width: `${progressPct}%` }}
+                                                                                transition={{ duration: 1, ease: "linear" }}
+                                                                            />
+                                                                        </div>
+
                                                                         {!task.completed && (
-                                                                            <div className="flex justify-end gap-2 mt-2">
+                                                                            <div className="flex justify-end gap-2 mt-3">
                                                                                 <button onClick={() => toggleTaskTimer(task.id)} className={`px-4 py-1.5 rounded text-xs font-bold tracking-wider uppercase transition-colors ${task.isRunning ? 'bg-orange-500/20 text-orange-400 border border-orange-500/50 hover:bg-orange-500/30' : 'bg-primary/20 text-primary border border-primary/50 hover:bg-primary/30'}`}>
                                                                                     {task.isRunning ? '⏸ Pause' : '▶ Start'}
                                                                                 </button>
                                                                             </div>
                                                                         )}
                                                                     </motion.div>
-                                                                ))}
+                                                                )})}
                                                                 {tasks.length === 0 && <p className="text-center text-gray-600 mt-6 text-sm">No tasks. Set a target and start the clock!</p>}
                                                             </AnimatePresence>
                                                         </div>
@@ -517,7 +546,7 @@
                                                                     <th className="p-4 font-medium border-b border-gray-800">Income</th>
                                                                     <th className="p-4 font-medium border-b border-gray-800">Expenses</th>
                                                                     <th className="p-4 font-medium border-b border-gray-800">Net Savings</th>
-                                                                    <th className="p-4 font-medium border-b border-gray-800">Study Score</th>
+                                                                    <th className="p-4 font-medium border-b border-gray-800">Study Status</th>
                                                                 </tr>
                                                             </thead>
                                                             <tbody className="bg-darkCard text-sm font-medium text-gray-200">
