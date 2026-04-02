@@ -223,11 +223,11 @@
                 const todayStr = new Date().toLocaleDateString();
                 const income = transactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
                 const expense = transactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
-                const completedTasks = tasks.filter(t => t.completed).length;
+                const tasksDeepCopy = tasks.map(t => ({...t}));
 
                 setLedger(prev => {
                     const existingIndex = prev.findIndex(l => l.date === todayStr);
-                    const newStatement = { date: todayStr, income, expense, savings: income - expense, studyScore: `${completedTasks}/${tasks.length}` };
+                    const newStatement = { date: todayStr, income, expense, savings: income - expense, studyTasks: tasksDeepCopy };
                     
                     if (existingIndex >= 0) {
                         const updated = [...prev];
@@ -285,6 +285,10 @@
 
             const markTaskDone = (id) => {
                 setTasks(tasks.map(t => t.id === id ? { ...t, completed: !t.completed, isRunning: false } : t));
+            };
+
+            const removeTask = (id) => {
+                setTasks(tasks.filter(t => t.id !== id));
             };
 
             // --- Calculations ---
@@ -514,13 +518,16 @@
                                                                             />
                                                                         </div>
 
-                                                                        {!task.completed && (
-                                                                            <div className="flex justify-end gap-2 mt-3">
+                                                                        <div className="flex justify-end gap-2 mt-3">
+                                                                            {!task.completed && (
                                                                                 <button onClick={() => toggleTaskTimer(task.id)} className={`px-4 py-1.5 rounded text-xs font-bold tracking-wider uppercase transition-colors ${task.isRunning ? 'bg-orange-500/20 text-orange-400 border border-orange-500/50 hover:bg-orange-500/30' : 'bg-primary/20 text-primary border border-primary/50 hover:bg-primary/30'}`}>
                                                                                     {task.isRunning ? '⏸ Pause' : '▶ Start'}
                                                                                 </button>
-                                                                            </div>
-                                                                        )}
+                                                                            )}
+                                                                            <button onClick={() => removeTask(task.id)} className="px-4 py-1.5 rounded text-xs font-bold tracking-wider uppercase transition-colors bg-red-500/20 text-red-400 border border-red-500/50 hover:bg-red-500/30">
+                                                                                ✖ Remove
+                                                                            </button>
+                                                                        </div>
                                                                     </motion.div>
                                                                 )})}
                                                                 {tasks.length === 0 && <p className="text-center text-gray-600 mt-6 text-sm">No tasks. Set a target and start the clock!</p>}
@@ -546,19 +553,35 @@
                                                                     <th className="p-4 font-medium border-b border-gray-800">Income</th>
                                                                     <th className="p-4 font-medium border-b border-gray-800">Expenses</th>
                                                                     <th className="p-4 font-medium border-b border-gray-800">Net Savings</th>
-                                                                    <th className="p-4 font-medium border-b border-gray-800">Study Status</th>
+                                                                    <th className="p-4 font-medium border-b border-gray-800 w-1/3">Study Status</th>
                                                                 </tr>
                                                             </thead>
                                                             <tbody className="bg-darkCard text-sm font-medium text-gray-200">
                                                                 <AnimatePresence>
                                                                     {ledger.map((day, i) => (
                                                                         <motion.tr key={day.date} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors">
-                                                                            <td className="p-4 text-gray-400">{day.date}</td>
-                                                                            <td className="p-4 text-green-400">{dispSym}{(day.income * dispRate).toFixed(2)}</td>
-                                                                            <td className="p-4 text-red-400">{dispSym}{(day.expense * dispRate).toFixed(2)}</td>
-                                                                            <td className={`p-4 ${day.savings >= 0 ? 'text-white' : 'text-red-300'}`}>{dispSym}{(Math.abs(day.savings) * dispRate).toFixed(2)}</td>
-                                                                            <td className="p-4">
-                                                                                <span className="bg-accent/20 text-accent px-2 py-1 rounded border border-accent/30">{day.studyScore}</span>
+                                                                            <td className="p-4 text-gray-400 align-top">{day.date}</td>
+                                                                            <td className="p-4 text-green-400 align-top">{dispSym}{(day.income * dispRate).toFixed(2)}</td>
+                                                                            <td className="p-4 text-red-400 align-top">{dispSym}{(day.expense * dispRate).toFixed(2)}</td>
+                                                                            <td className={`p-4 align-top ${day.savings >= 0 ? 'text-white' : 'text-red-300'}`}>{dispSym}{(Math.abs(day.savings) * dispRate).toFixed(2)}</td>
+                                                                            <td className="p-4 align-top">
+                                                                                <div className="space-y-3 max-h-40 overflow-y-auto pr-2">
+                                                                                    {(day.studyTasks || []).map(t => {
+                                                                                        const pct = ((t.totalTime - t.remainingTime) / t.totalTime) * 100;
+                                                                                        return (
+                                                                                            <div key={t.id} className="text-xs flex flex-col gap-1.5">
+                                                                                                <div className="flex justify-between text-gray-300">
+                                                                                                    <span className="truncate max-w-[150px] font-medium" title={t.title}>{t.title}</span>
+                                                                                                    <span className="font-mono">{t.completed ? 'Done' : `${Math.floor(pct)}%`}</span>
+                                                                                                </div>
+                                                                                                <div className="w-full bg-gray-800 h-1.5 rounded-full overflow-hidden">
+                                                                                                    <div className={`h-full ${t.completed ? 'bg-green-500' : 'bg-accent'}`} style={{ width: `${t.completed ? 100 : pct}%` }} />
+                                                                                                </div>
+                                                                                            </div>
+                                                                                        );
+                                                                                    })}
+                                                                                    {(!day.studyTasks || day.studyTasks.length === 0) && <span className="text-gray-500 italic">No targets set</span>}
+                                                                                </div>
                                                                             </td>
                                                                         </motion.tr>
                                                                     ))}
